@@ -1,18 +1,30 @@
 import { useMemo, type CSSProperties } from "react";
-import { Tldraw } from "tldraw";
+import { Tldraw, type TLComponents } from "tldraw";
 import "tldraw/tldraw.css";
 import { useRoomSync } from "./sync/useRoomSync";
-import { CanvasHeader } from "./canvas/CanvasHeader";
+import {
+  CanvasRoomProvider,
+  CustomSharePanel,
+  CustomTopPanel,
+} from "./canvas/CanvasHeader";
 
 /**
  * The collaborative canvas. Reads the room + share token from the URL, connects
- * the store to the sync server, and only mounts the editor once the document
- * has been reconciled (so a joining peer sees existing content rather than
- * creating a duplicate default page).
+ * the store to the sync server, and mounts the editor with custom tldraw
+ * component slots (SharePanel and TopPanel) to seamlessly integrate the share
+ * dialog and room controls without overlapping tldraw's native toolbars or menus.
  */
 export default function Editor() {
   const { roomId, token, name } = useRoomParams();
   const { status, sync, error } = useRoomSync(roomId, token, name);
+
+  const customComponents: TLComponents = useMemo(
+    () => ({
+      SharePanel: CustomSharePanel,
+      TopPanel: CustomTopPanel,
+    }),
+    []
+  );
 
   if (status === "error") {
     return (
@@ -32,13 +44,14 @@ export default function Editor() {
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
-      <CanvasHeader
+      <CanvasRoomProvider
         roomId={roomId}
         token={token}
-        currentName={name}
+        name={name}
         provider={sync.provider}
-      />
-      <Tldraw store={sync.store} />
+      >
+        <Tldraw store={sync.store} components={customComponents} />
+      </CanvasRoomProvider>
     </div>
   );
 }

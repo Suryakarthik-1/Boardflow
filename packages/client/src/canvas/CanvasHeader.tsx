@@ -1,4 +1,14 @@
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  createContext,
+  useContext,
+  type ReactNode,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
+import { CenteredTopPanelContainer } from "tldraw";
 import type { WebsocketProvider } from "y-websocket";
 
 interface Collaborator {
@@ -7,23 +17,57 @@ interface Collaborator {
   color: string;
 }
 
-interface CanvasHeaderProps {
+interface CanvasRoomContextValue {
   roomId: string;
   token: string;
-  currentName: string;
+  name: string;
   provider: WebsocketProvider;
 }
 
-export function CanvasHeader({
+const CanvasRoomContext = createContext<CanvasRoomContextValue | null>(null);
+
+export function useCanvasRoom() {
+  const ctx = useContext(CanvasRoomContext);
+  if (!ctx) {
+    throw new Error("useCanvasRoom must be used within CanvasRoomProvider");
+  }
+  return ctx;
+}
+
+interface CanvasRoomProviderProps {
+  roomId: string;
+  token: string;
+  name: string;
+  provider: WebsocketProvider;
+  children: ReactNode;
+}
+
+export function CanvasRoomProvider({
   roomId,
   token,
-  currentName,
+  name,
   provider,
-}: CanvasHeaderProps) {
-  const [showShare, setShowShare] = useState(false);
-  const [copied, setCopied] = useState(false);
+  children,
+}: CanvasRoomProviderProps) {
+  const value = useMemo(
+    () => ({ roomId, token, name, provider }),
+    [roomId, token, name, provider]
+  );
+  return (
+    <CanvasRoomContext.Provider value={value}>
+      {children}
+    </CanvasRoomContext.Provider>
+  );
+}
+
+/**
+ * CustomTopPanel: Hooks natively into tldraw's `TopPanel` slot.
+ * Uses CenteredTopPanelContainer to dynamically clamp max-width and center
+ * between tldraw's top-left MenuPanel and top-right Share/Style panels.
+ */
+export function CustomTopPanel() {
+  const { roomId, provider } = useCanvasRoom();
   const [roomName, setRoomName] = useState<string>("Boardflow");
-  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [isConnected, setIsConnected] = useState(provider.wsconnected);
 
   // Fetch room name from API
@@ -47,6 +91,38 @@ export function CanvasHeader({
       provider.off("sync", onStatus);
     };
   }, [provider]);
+
+  return (
+    <CenteredTopPanelContainer>
+      <div style={topPanelStyle}>
+        <a href="/" style={homeLinkStyle} title="Back to Home">
+          <span style={{ fontSize: "14px" }}>←</span>
+          <span style={{ fontWeight: 700, letterSpacing: "-0.01em" }}>Boardflow</span>
+        </a>
+        <span style={dividerStyle}>/</span>
+        <span style={roomTitleStyle} title={roomName}>{roomName}</span>
+        <span
+          style={{
+            ...statusDotStyle,
+            background: isConnected ? "#3fb98a" : "#f5b301",
+          }}
+          title={isConnected ? "Realtime Sync Connected" : "Reconnecting..."}
+        />
+      </div>
+    </CenteredTopPanelContainer>
+  );
+}
+
+/**
+ * CustomSharePanel: Hooks natively into tldraw's `SharePanel` slot.
+ * Renders inside tldraw's top-right layout zone directly above the StylePanel,
+ * completely eliminating overlapping with canvas tools.
+ */
+export function CustomSharePanel() {
+  const { token, name: currentName, provider } = useCanvasRoom();
+  const [showShare, setShowShare] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
 
   // Track active collaborators via awareness
   useEffect(() => {
@@ -78,7 +154,7 @@ export function CanvasHeader({
   const shareUrl = useMemo(() => {
     const url = new URL(window.location.href);
     if (token) url.searchParams.set("token", token);
-    url.searchParams.delete("name"); // let joining guest generate their own name
+    url.searchParams.delete("name"); // let joining guest enter their own name
     return url.toString();
   }, [token]);
 
@@ -102,27 +178,9 @@ export function CanvasHeader({
 
   return (
     <>
-      <header style={headerStyle}>
-        {/* Left: Branding & Room Info */}
-        <div style={leftSectionStyle}>
-          <a href="/" style={homeLinkStyle} title="Back to Home">
-            <span style={{ fontSize: "16px" }}>←</span>
-            <span style={{ fontWeight: 700, letterSpacing: "-0.02em" }}>Boardflow</span>
-          </a>
-          <span style={dividerStyle}>/</span>
-          <span style={roomTitleStyle}>{roomName}</span>
-          <span
-            style={{
-              ...statusDotStyle,
-              background: isConnected ? "#3fb98a" : "#f5b301",
-            }}
-            title={isConnected ? "Connected (Realtime Sync Active)" : "Reconnecting..."}
-          />
-        </div>
-
-        {/* Right: Collaborators & Share Button */}
-        <div style={rightSectionStyle}>
-          {/* Active Collaborators Avatars */}
+      <div className="tlui-share-zone" style={shareZoneStyle}>
+        {/* Active Collaborators Avatars */}
+        {collaborators.length > 0 && (
           <div style={avatarGroupStyle}>
             {collaborators.map((c, i) => (
               <div
@@ -130,7 +188,7 @@ export function CanvasHeader({
                 style={{
                   ...avatarStyle,
                   background: c.color,
-                  marginLeft: i === 0 ? 0 : "-8px",
+                  marginLeft: i === 0 ? 0 : "-6px",
                   zIndex: 10 - i,
                 }}
                 title={c.name === currentName ? `${c.name} (You)` : c.name}
@@ -139,75 +197,90 @@ export function CanvasHeader({
               </div>
             ))}
           </div>
+        )}
 
-          {/* Share Button */}
-          <button
-            style={shareButtonStyle}
-            onClick={() => setShowShare(true)}
-            aria-label="Share this board"
-          >
-            <ShareIcon />
-            <span>Share</span>
-          </button>
-        </div>
-      </header>
+        {/* Share Button */}
+        <button
+          type="button"
+          style={shareButtonStyle}
+          onClick={() => setShowShare(true)}
+          aria-label="Share this board"
+          title="Share board link"
+        >
+          <ShareIcon />
+          <span>Share</span>
+        </button>
+      </div>
 
-      {/* Share Modal Dialog */}
-      {showShare && (
-        <div style={modalBackdropStyle} onClick={() => setShowShare(false)}>
-          <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>
-              <div>
-                <h3 style={modalTitleStyle}>Share board</h3>
-                <p style={modalSubtitleStyle}>
-                  Anyone with this link can view and collaborate in real-time.
-                </p>
+      {/* Share Modal Dialog - Portaled to document.body to avoid clipping */}
+      {showShare &&
+        createPortal(
+          <div style={modalBackdropStyle} onClick={() => setShowShare(false)}>
+            <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
+              <div style={modalHeaderStyle}>
+                <div>
+                  <h3 style={modalTitleStyle}>Share board</h3>
+                  <p style={modalSubtitleStyle}>
+                    Anyone with this link can view and collaborate in real-time.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  style={closeButtonStyle}
+                  onClick={() => setShowShare(false)}
+                  aria-label="Close dialog"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                style={closeButtonStyle}
-                onClick={() => setShowShare(false)}
-                aria-label="Close dialog"
-              >
-                ✕
-              </button>
-            </div>
 
-            <div style={inputGroupStyle}>
-              <input
-                type="text"
-                readOnly
-                value={shareUrl}
-                style={inputStyle}
-                onFocus={(e) => e.target.select()}
-              />
-              <button
-                style={{
-                  ...copyButtonStyle,
-                  background: copied ? "#3fb98a" : "#62d6a0",
-                  color: "#062a24",
-                }}
-                onClick={handleCopy}
-              >
-                {copied ? "Copied! ✓" : "Copy link"}
-              </button>
-            </div>
+              <div style={inputGroupStyle}>
+                <input
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  style={inputStyle}
+                  onFocus={(e) => e.target.select()}
+                />
+                <button
+                  type="button"
+                  style={{
+                    ...copyButtonStyle,
+                    background: copied ? "#3fb98a" : "#62d6a0",
+                    color: "#062a24",
+                  }}
+                  onClick={handleCopy}
+                >
+                  {copied ? "Copied! ✓" : "Copy link"}
+                </button>
+              </div>
 
-            <div style={metaFooterStyle}>
-              <span style={badgeStyle}>Role: Editor</span>
-              <span style={userNoticeStyle}>
-                You are drawing as <strong>{currentName}</strong>
-              </span>
+              <div style={metaFooterStyle}>
+                <span style={badgeStyle}>Role: Editor</span>
+                <span style={userNoticeStyle}>
+                  You are drawing as <strong>{currentName}</strong>
+                </span>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 }
 
 function ShareIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="18" cy="5" r="3"></circle>
       <circle cx="6" cy="12" r="3"></circle>
       <circle cx="18" cy="19" r="3"></circle>
@@ -218,39 +291,21 @@ function ShareIcon() {
 }
 
 // ---------------------------------------------------------------------------
-// Styles (Scoped, High z-index to overlay canvas cleanly)
+// Native tldraw Slot Styling
 // ---------------------------------------------------------------------------
 
-const headerStyle: CSSProperties = {
-  position: "absolute",
-  top: 10,
-  left: 12,
-  right: 12,
-  zIndex: 400,
-  display: "flex",
-  justifyContent: "space-between",
+const topPanelStyle: CSSProperties = {
+  display: "inline-flex",
   alignItems: "center",
-  pointerEvents: "none", // lets canvas below receive clicks except on controls
-};
-
-const leftSectionStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
+  gap: "8px",
   background: "rgba(6, 42, 36, 0.88)",
   backdropFilter: "blur(12px)",
-  padding: "7px 14px",
-  borderRadius: "10px",
-  border: "1px solid rgba(245, 245, 240, 0.12)",
-  boxShadow: "0 4px 18px rgba(0, 0, 0, 0.18)",
-  pointerEvents: "auto",
-};
-
-const rightSectionStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  pointerEvents: "auto",
+  padding: "5px 12px",
+  borderRadius: "8px",
+  border: "1px solid rgba(245, 245, 240, 0.14)",
+  boxShadow: "0 2px 10px rgba(0, 0, 0, 0.18)",
+  pointerEvents: "all",
+  marginTop: "4px",
 };
 
 const homeLinkStyle: CSSProperties = {
@@ -259,17 +314,17 @@ const homeLinkStyle: CSSProperties = {
   gap: "6px",
   color: "#f5f5f0",
   textDecoration: "none",
-  fontSize: "14px",
+  fontSize: "13px",
 };
 
 const dividerStyle: CSSProperties = {
   color: "rgba(245, 245, 240, 0.28)",
-  fontSize: "14px",
+  fontSize: "13px",
 };
 
 const roomTitleStyle: CSSProperties = {
   color: "#d9f1e5",
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 500,
   maxWidth: "180px",
   overflow: "hidden",
@@ -285,39 +340,48 @@ const statusDotStyle: CSSProperties = {
   marginLeft: "2px",
 };
 
+const shareZoneStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "4px 8px 0 0",
+  pointerEvents: "all",
+};
+
 const shareButtonStyle: CSSProperties = {
-  display: "flex",
+  display: "inline-flex",
   alignItems: "center",
   gap: "6px",
   background: "#62d6a0",
   color: "#062a24",
   border: "none",
   borderRadius: "8px",
-  padding: "8px 14px",
-  fontSize: "13px",
+  padding: "6px 12px",
+  fontSize: "12px",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.22)",
+  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.16)",
   transition: "all 0.15s ease",
+  lineHeight: "1",
 };
 
 const avatarGroupStyle: CSSProperties = {
-  display: "flex",
+  display: "inline-flex",
   alignItems: "center",
   background: "rgba(6, 42, 36, 0.88)",
   backdropFilter: "blur(12px)",
-  padding: "4px 8px",
-  borderRadius: "10px",
-  border: "1px solid rgba(245, 245, 240, 0.12)",
+  padding: "3px 6px",
+  borderRadius: "8px",
+  border: "1px solid rgba(245, 245, 240, 0.14)",
 };
 
 const avatarStyle: CSSProperties = {
-  width: "28px",
-  height: "28px",
+  width: "24px",
+  height: "24px",
   borderRadius: "50%",
   display: "grid",
   placeItems: "center",
-  fontSize: "11px",
+  fontSize: "10px",
   fontWeight: 800,
   color: "#062a24",
   border: "2px solid #062a24",
@@ -327,9 +391,9 @@ const avatarStyle: CSSProperties = {
 const modalBackdropStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0, 0, 0, 0.5)",
+  background: "rgba(0, 0, 0, 0.55)",
   backdropFilter: "blur(4px)",
-  zIndex: 1000,
+  zIndex: 10000,
   display: "grid",
   placeItems: "center",
   padding: "20px",
