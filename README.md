@@ -31,6 +31,7 @@ Unlike tools that treat AI as a screenshot analyzer, **Boardflow** reasons direc
 - [Key design decisions](#key-design-decisions)
 - [Tech stack](#tech-stack)
 - [Configuration](#configuration)
+- [Deployment](#deployment)
 - [Testing](#testing)
 - [Status & Roadmap](#status--roadmap)
 - [License & Author](#license--author)
@@ -372,6 +373,42 @@ npm run test:e2e
 
 ---
 
+## Deployment
+
+Boardflow is fully containerized with a multi-stage Docker build that serves both the compiled React frontend and the Fastify WebSocket backend on a single port with zero CORS configuration.
+
+### Deploy on Render (Recommended, Free Tier)
+
+1. Fork or push this repository to GitHub.
+2. Sign in to [Render](https://render.com).
+3. Click **New +** → **Blueprint**.
+4. Connect `Suryakarthik-1/Boardflow` — Render will detect `render.yaml` automatically.
+5. Click **Apply**. Your app will be live at `https://boardflow-xxxx.onrender.com`.
+
+*(Alternatively: **New +** → **Web Service** → Select your repo → Choose **Docker** as the runtime).*
+
+### Deploy on Railway
+
+1. Sign in to [Railway](https://railway.app).
+2. Click **New Project** → **Deploy from GitHub repo**.
+3. Select `Boardflow` — Railway reads `Dockerfile` & `railway.json` and deploys automatically.
+4. Under the service **Settings** → **Networking**, click **Generate Domain**.
+
+### Deploy via Docker locally or VPS
+
+```bash
+# Build the container
+docker build -t boardflow .
+
+# Run the container
+docker run -p 8080:8080 \
+  -e AI_PROVIDER=mock \
+  boardflow
+```
+Visit `http://localhost:8080` to access the production app.
+
+---
+
 ## Status & Roadmap
 
 - [x] Shared wire contracts (`@boardflow/shared`)
@@ -382,9 +419,9 @@ npm run test:e2e
 - [x] Multi-instance scaling via Redis pub/sub
 - [x] 5 canvas-native AI features (roadmap, explain, generate, summary, tasks)
 - [x] Cadvel-inspired landing page
+- [x] One-click cloud deployment (Docker, Render, Railway)
 - [ ] In-canvas commenting & thread UI
 - [ ] Vector search & semantic canvas embeddings
-- [ ] One-click cloud deployment (Docker, Fly.io, Vercel)
 
 ---
 

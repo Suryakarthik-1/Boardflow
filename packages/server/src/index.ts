@@ -1,6 +1,10 @@
 import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import { loadConfig } from "./config.js";
 import { createPersistence } from "./store/persistence.js";
 import { RoomManager } from "./ws/rooms.js";
@@ -13,7 +17,12 @@ import { snapshotRoutes } from "./routes/snapshots.js";
 const config = loadConfig();
 
 const app = Fastify({ logger: true });
-await app.register(cors, { origin: config.CLIENT_ORIGIN.split(",") });
+await app.register(cors, {
+  origin:
+    config.CLIENT_ORIGIN === "*"
+      ? true
+      : config.CLIENT_ORIGIN.split(",").map((s) => s.trim()),
+});
 
 const persistence = createPersistence(config);
 await persistence.connect();
@@ -30,6 +39,32 @@ app.get("/health", async () => ({
 await app.register(roomRoutes(rooms));
 await app.register(aiRoutes(llm));
 await app.register(snapshotRoutes(rooms));
+
+// In production / container builds, serve the built Vite client from the same server
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const candidatePaths = [
+  path.resolve(__dirname, "../../client/dist"),
+  path.resolve(__dirname, "../client/dist"),
+  path.resolve(process.cwd(), "packages/client/dist"),
+  path.resolve(process.cwd(), "client/dist"),
+];
+const clientDist = candidatePaths.find((p) => fs.existsSync(p));
+
+if (clientDist) {
+  app.log.info({ clientDist }, "serving static client bundle");
+  await app.register(fastifyStatic, {
+    root: clientDist,
+    prefix: "/",
+    wildcard: false,
+  });
+
+  app.setNotFoundHandler(async (req, reply) => {
+    if (req.raw.url?.startsWith("/api") || req.raw.url?.startsWith("/ws")) {
+      return reply.code(404).send({ error: "not_found" });
+    }
+    return reply.sendFile("index.html");
+  });
+}
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });
 

@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: boardflow
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: CLIENT_ORIGIN
+        value: "*"
+      - key: AI_PROVIDER
+        value: mock
+      # Uncomment or set in the Render Dashboard when you're ready:
+      # - key: DEEPSEEK_API_KEY
+      #   sync: false
+      # - key: MONGODB_URI
+      #   sync: false
+      # - key: REDIS_URL
+      #   sync: false
