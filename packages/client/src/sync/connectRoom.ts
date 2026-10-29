@@ -3,7 +3,6 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
 import {
   createTLStore,
-  getSnapshot,
   loadSnapshot,
   type TLRecord,
   type TLStore,
@@ -98,7 +97,10 @@ function reconcile(store: TLStore, ydoc: Y.Doc): void {
 
   let schemaStr = document.get(SCHEMA_KEY) as string | undefined;
   if (!schemaStr) {
-    schemaStr = JSON.stringify(getSnapshot(store).document.schema);
+    // `store.schema.serialize()` is what `getStoreSnapshot` uses internally;
+    // `getSnapshot(store)` would throw ("Session state is not ready yet")
+    // because this bare store has no Editor-initialized session state yet.
+    schemaStr = JSON.stringify(store.schema.serialize());
     document.set(SCHEMA_KEY, schemaStr);
   }
 
