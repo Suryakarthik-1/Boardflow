@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from "react";
 import { Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import { useRoomSync } from "./sync/useRoomSync";
+import { CanvasHeader } from "./canvas/CanvasHeader";
 
 /**
  * The collaborative canvas. Reads the room + share token from the URL, connects
@@ -31,6 +32,12 @@ export default function Editor() {
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
+      <CanvasHeader
+        roomId={roomId}
+        token={token}
+        currentName={name}
+        provider={sync.provider}
+      />
       <Tldraw store={sync.store} />
     </div>
   );
