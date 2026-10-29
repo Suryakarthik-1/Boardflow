@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.pnp/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+.vite/
+
+# Logs & OS noise
+*.log
+.DS_Store

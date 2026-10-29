@@ -1,0 +1,22 @@
+# Optional local MongoDB + Redis for development and the full test
+# suite. The app also ships with in-memory fallbacks, so you don't
+# need this to run the demo — it's here for a production-like setup
+# and for E2E tests that exercise real persistence.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: boardflow-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: boardflow-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  mongo-data:

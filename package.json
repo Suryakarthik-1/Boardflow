@@ -1,0 +1,26 @@
+{
+  "name": "boardflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Boardflow — an AI collaborative creation platform: a shared canvas for docs, diagrams and visual planning with CRDT sync, offline edits, and AI that works on the actual canvas objects.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev --workspace @boardflow/server\" \"npm run dev --workspace @boardflow/client\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
