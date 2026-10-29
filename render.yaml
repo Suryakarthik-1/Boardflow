@@ -6,8 +6,6 @@ services:
     plan: free
     region: oregon
     envVars:
-      - key: PORT
-        value: 8080
       - key: CLIENT_ORIGIN
         value: "*"
       - key: AI_PROVIDER
